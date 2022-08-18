@@ -21,22 +21,27 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.util.Base64
 import android.util.Log
 import androidx.camera.core.ImageProxy
 import com.github.wnameless.json.flattener.JsonFlattener
+import com.google.crypto.tink.subtle.Ed25519Verify
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.jayway.jsonpath.JsonPath
 import org.idpass.smartscanner.api.ScannerConstants
+import org.idpass.smartscanner.lib.BuildConfig
 import org.idpass.smartscanner.lib.SmartScannerActivity
 import org.idpass.smartscanner.lib.platform.BaseImageAnalyzer
 import org.idpass.smartscanner.lib.platform.extension.setContrast
 import org.idpass.smartscanner.lib.platform.utils.BitmapUtils
 import org.idpass.smartscanner.lib.platform.utils.GzipUtils
 import org.idpass.smartscanner.lib.scanner.config.Modes
+import org.json.JSONArray
 import org.json.JSONObject
+import java.security.GeneralSecurityException
 import java.util.zip.ZipException
 
 
@@ -98,7 +103,7 @@ class QRCodeAnalyzer(
         }
     }
 
-    private fun sendResult(rawValue: String? , rawBytes: ByteArray?) {
+    private fun sendResult(rawValue: String?, rawBytes: ByteArray?) {
         // parse and read qr data and add to bundle intent
         val bundle = Bundle()
         Log.d(SmartScannerActivity.TAG, "Success from QRCODE")
@@ -131,6 +136,60 @@ class QRCodeAnalyzer(
             "${SmartScannerActivity.TAG}/SmartScanner",
             "bundle: $bundle"
         )
+
+        Log.d(
+            "JSON DATA",
+            "$data"
+        )
+        if (data != null && intent.action ==  ScannerConstants.IDPASS_SMARTSCANNER_ODK_QRCODE_INTENT)
+        {
+            var jsonData = JSONObject(data)
+            var subject:String = jsonData.get("subject").toString()
+            var signature:String = jsonData.get("signature").toString()
+            val publicKey = BuildConfig.PUBLIC_KEY
+
+            val publicKeyDecoded = Base64.decode(publicKey.toByteArray(),0)
+            var signatureDecoded = Base64.decode(signature.toByteArray(),0);
+            val ed = Ed25519Verify(publicKeyDecoded)
+            if(jsonData is JSONArray){
+                jsonData.keys().forEach {
+                    if(jsonData.get(it) !is JSONArray){
+                        bundle.putString(it, jsonData.get(it).toString())
+                    }
+                }
+                var subjectJSON = JSONObject(subject)
+                subjectJSON.keys().forEach {
+                    if(subjectJSON.get(it) !is JSONArray){
+                        bundle.putString(it, subjectJSON.get(it).toString())
+                    }
+                }
+
+            }
+
+            try{
+
+                ed.verify(signatureDecoded, subject.toByteArray())
+                Log.d(
+                    "Verify Result",
+                    "Success"
+                )
+            } catch ( ex:GeneralSecurityException) {
+                Log.d(
+                    "Verify Result",
+                    "${ex.message}"
+                )
+            } catch (ex:Exception){
+                Log.d(
+                    "Verify Result",
+                    "${ex.message}"
+                )
+            }
+            val flattenMap = flattenJson(data)
+            for ((k, v) in flattenMap) {
+                bundle.putString(k, v)
+            }
+        }
+
         bundle.putString(ScannerConstants.MODE, mode)
         bundle.putString(ScannerConstants.QRCODE_TEXT, data)
 

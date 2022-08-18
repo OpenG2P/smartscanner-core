@@ -33,20 +33,20 @@ android {
         viewBinding = true
     }
 
-    signingConfigs{
-        release {
-            def props = new Properties()
-
-            def fileInputStream = new FileInputStream(file('../signing.properties'))
-            props.load(fileInputStream)
-            fileInputStream.close()
-
-            storeFile = file('upload-keystore')
-            storePassword = props['STORE_PASSWORD']
-            keyAlias = props['KEY_ALIAS']
-            keyPassword = props['KEY_PASSWORD']
-        }
-    }
+//    signingConfigs{
+//        release {
+//            def props = new Properties()
+//
+//            def fileInputStream = new FileInputStream(file('../signing.properties'))
+//            props.load(fileInputStream)
+//            fileInputStream.close()
+//
+//            storeFile = file('upload-keystore')
+//            storePassword = props['STORE_PASSWORD']
+//            keyAlias = props['KEY_ALIAS']
+//            keyPassword = props['KEY_PASSWORD']
+//        }
+//    }
 
     buildTypes {
         debug {
@@ -55,7 +55,7 @@ android {
         }
         release {
             minifyEnabled false
-            signingConfig signingConfigs.release
+//            signingConfig signingConfigs.release
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
         android.applicationVariants.all { variant ->
