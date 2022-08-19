@@ -149,7 +149,7 @@ class QRCodeAnalyzer(
         {
             var jsonData = JSONObject(data)
             var subject:String = jsonData.get("subject").toString()
-            var signature:String = jsonData.get("signature").toString()
+            var signature:String = jsonData.get("si").toString()
             val publicKey = BuildConfig.PUBLIC_KEY
 
             val publicKeyDecoded = Base64.decode(publicKey.toByteArray(),0)
