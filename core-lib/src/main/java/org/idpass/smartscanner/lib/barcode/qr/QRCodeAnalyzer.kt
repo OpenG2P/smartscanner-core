@@ -19,10 +19,14 @@ package org.idpass.smartscanner.lib.barcode.qr
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.util.Base64
 import android.util.Log
+import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AlertDialog
 import androidx.camera.core.ImageProxy
 import com.github.wnameless.json.flattener.JsonFlattener
 import com.google.crypto.tink.subtle.Ed25519Verify
@@ -33,6 +37,7 @@ import com.google.mlkit.vision.common.InputImage
 import com.jayway.jsonpath.JsonPath
 import org.idpass.smartscanner.api.ScannerConstants
 import org.idpass.smartscanner.lib.BuildConfig
+import org.idpass.smartscanner.lib.R
 import org.idpass.smartscanner.lib.SmartScannerActivity
 import org.idpass.smartscanner.lib.platform.BaseImageAnalyzer
 import org.idpass.smartscanner.lib.platform.extension.setContrast
@@ -44,13 +49,15 @@ import org.json.JSONObject
 import java.security.GeneralSecurityException
 import java.util.zip.ZipException
 
-
 class QRCodeAnalyzer(
     override val activity: Activity,
     override val intent: Intent,
     override val mode: String = Modes.QRCODE.value
 ) : BaseImageAnalyzer() {
+    var context:Context = activity
+    var dialogShown = false
 
+    @RequiresApi(Build.VERSION_CODES.O)
     @SuppressLint("UnsafeExperimentalUsageError", "UnsafeOptInUsageError")
     override fun analyze(imageProxy: ImageProxy) {
         val bitmap = BitmapUtils.getBitmap(imageProxy)
@@ -103,6 +110,7 @@ class QRCodeAnalyzer(
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun sendResult(rawValue: String?, rawBytes: ByteArray?) {
         // parse and read qr data and add to bundle intent
         val bundle = Bundle()
@@ -137,11 +145,7 @@ class QRCodeAnalyzer(
             "bundle: $bundle"
         )
 
-        Log.d(
-            "JSON DATA",
-            "$data"
-        )
-        if (data != null && intent.action ==  ScannerConstants.IDPASS_SMARTSCANNER_ODK_QRCODE_INTENT)
+       if (data != null && intent.action ==  ScannerConstants.IDPASS_SMARTSCANNER_ODK_QRCODE_INTENT)
         {
             var jsonData = JSONObject(data)
             var subject:String = jsonData.get("subject").toString()
@@ -151,59 +155,76 @@ class QRCodeAnalyzer(
             val publicKeyDecoded = Base64.decode(publicKey.toByteArray(),0)
             var signatureDecoded = Base64.decode(signature.toByteArray(),0);
             val ed = Ed25519Verify(publicKeyDecoded)
-            if(jsonData is JSONArray){
-                jsonData.keys().forEach {
-                    if(jsonData.get(it) !is JSONArray){
-                        bundle.putString(it, jsonData.get(it).toString())
-                    }
-                }
-                var subjectJSON = JSONObject(subject)
-                subjectJSON.keys().forEach {
-                    if(subjectJSON.get(it) !is JSONArray){
-                        bundle.putString(it, subjectJSON.get(it).toString())
-                    }
-                }
 
+            jsonData.keys().forEach {
+                if(jsonData.get(it) !is JSONObject){
+                    bundle.putString(it, jsonData.get(it).toString())
+                }
+            }
+            var subjectJSON = JSONObject(subject)
+            subjectJSON.keys().forEach {
+                if(subjectJSON.get(it) !is JSONArray){
+                    bundle.putString(it, subjectJSON.get(it).toString())
+                }
             }
 
             try{
 
                 ed.verify(signatureDecoded, subject.toByteArray())
                 Log.d(
-                    "Verify Result",
-                    "Success"
+                    "${SmartScannerActivity.TAG}/SmartScanner",
+                    "Signature Verify Result : Success"
                 )
+
+                bundle.putString(ScannerConstants.MODE, mode)
+
+                val result = Intent()
+                val prefix = if (intent.hasExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)) {
+                    intent.getStringExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)
+                } else { "" }
+                result.putExtra(ScannerConstants.RESULT, bundle)
+                // Copy all the values in the intent result to be compatible with other implementations than commcare
+                for (key in bundle.keySet()) {
+//                    Log.d("Final Bundle Item", "$key : ${bundle.getString(key)}")
+                    result.putExtra(prefix + key, bundle.getString(key))
+                }
+                activity.setResult(Activity.RESULT_OK, result)
+                activity.finish()
+
             } catch ( ex:GeneralSecurityException) {
                 Log.d(
-                    "Verify Result",
-                    "${ex.message}"
+                    "${SmartScannerActivity.TAG}/SmartScanner",
+                    "Signature Verify Result : ${ex.message}"
                 )
+
+                if(dialogShown == false)
+                    showErrorMessage(ex.message.toString())
             } catch (ex:Exception){
                 Log.d(
-                    "Verify Result",
-                    "${ex.message}"
+                    "${SmartScannerActivity.TAG}/SmartScanner",
+                    "Signature Verify Result : ${ex.message}"
                 )
+                if(dialogShown == false)
+                    showErrorMessage(ex.message.toString())
             }
-            val flattenMap = flattenJson(data)
-            for ((k, v) in flattenMap) {
-                bundle.putString(k, v)
+        } else {
+            bundle.putString(ScannerConstants.MODE, mode)
+            bundle.putString(ScannerConstants.QRCODE_TEXT, data)
+
+            val result = Intent()
+            val prefix = if (intent.hasExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)) {
+                intent.getStringExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)
+            } else { "" }
+            result.putExtra(ScannerConstants.RESULT, bundle)
+            // Copy all the values in the intent result to be compatible with other implementations than commcare
+            for (key in bundle.keySet()) {
+                result.putExtra(prefix + key, bundle.getString(key))
             }
+            activity.setResult(Activity.RESULT_OK, result)
+            activity.finish()
         }
 
-        bundle.putString(ScannerConstants.MODE, mode)
-        bundle.putString(ScannerConstants.QRCODE_TEXT, data)
 
-        val result = Intent()
-        val prefix = if (intent.hasExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)) {
-            intent.getStringExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)
-        } else { "" }
-        result.putExtra(ScannerConstants.RESULT, bundle)
-        // Copy all the values in the intent result to be compatible with other implementations than commcare
-        for (key in bundle.keySet()) {
-            result.putExtra(prefix + key, bundle.getString(key))
-        }
-        activity.setResult(Activity.RESULT_OK, result)
-        activity.finish()
     }
 
     private fun getGzippedData(rawBytes: ByteArray?) : String? {
@@ -232,4 +253,17 @@ class QRCodeAnalyzer(
         )
         return map
     }
+    private fun showErrorMessage(message:String) {
+        dialogShown = true
+        val dialog: AlertDialog.Builder = AlertDialog.Builder(context)
+        dialog.setMessage(message)
+        dialog.setNegativeButton(R.string.label_close) { alert, which ->
+            run {
+                dialogShown = false
+            }
+        }
+        dialog.show()
+    }
+
+
 }
