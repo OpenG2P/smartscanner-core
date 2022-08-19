@@ -167,6 +167,30 @@ class QRCodeAnalyzer(
                     bundle.putString(it, subjectJSON.get(it).toString())
                 }
             }
+            var dIssued = bundle.getString("d")
+            var sfx = bundle.getString("sf")
+            var ln = bundle.getString("ln")
+            var fn = bundle.getString("fn")
+            var mn = bundle.getString("mn")
+            var sx = bundle.getString("sx")
+            var bf = bundle.getString("bf")
+            var dob2 = bundle.getString("dob2")
+            var pob = bundle.getString("pob")
+            var PCN = bundle.getString("PCN")
+            var img = bundle.getString("img")
+            subject = "{ \"i\": \"PSA\"," +
+                    " \"d\": \""+dIssued+"\"," +
+                    " \"sb\": {   \"sf\": \""+sfx+"\",   " +
+                    "\"ln\": \""+ln+"\",   "+
+                    "\"fn\": \""+fn+"\",   "+
+                    "\"mn\": \""+mn+"\",   "+
+                    "\"s\": \""+sx+"\",   "+
+                    "\"BF\": \""+bf+"\",   "+
+                    "\"DOB\": \""+dob2+"\",   "+
+                    "\"POB\": \""+pob+"\",   "+
+                    "\"PCN\": \""+PCN+"\" },"+
+                    "\"img\": \""+img+"\"}";
+
 
             try{
 
