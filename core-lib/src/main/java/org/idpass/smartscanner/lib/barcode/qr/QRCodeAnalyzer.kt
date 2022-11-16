@@ -196,7 +196,7 @@ class QRCodeAnalyzer(
                     else {
                         status = false
                         statusMessage = "QR Code Not Recognized"
-                        invalidQRCodesteps(intent, bundle, data, status, statusMessage)
+                        invalidQRCodesteps(intent, bundle, data, status, statusMessage, 102)
                     }
 
 
@@ -214,17 +214,16 @@ class QRCodeAnalyzer(
                         result.putExtra(prefix + key, bundle.getString(key))
                     }
 
-                    status = true
-                    statusMessage = "Success"
-                    result.putExtra("status", status.toString())
-                    result.putExtra("status_message", statusMessage.toString())
+                    result.putExtra("status", "true")
+                    result.putExtra("status_message", "Success")
+                    result.putExtra("status_code", "100")
                     Log.d("Result Items", result.extras.toString())
                     activity.setResult(Activity.RESULT_OK, result)
                     activity.finish()
                 } catch (ex: Exception){
                     status = false
                     statusMessage = "QR Code Not Recognized"
-                    invalidQRCodesteps(intent, bundle,data, status, statusMessage)
+                    invalidQRCodesteps(intent, bundle,data, status, statusMessage,102)
                 }
             }
             else {
@@ -251,8 +250,9 @@ class QRCodeAnalyzer(
     private fun identifier(data: String, bundle: Bundle, intent: Intent) {
         val qr_code_types = JSONArray(intent.getStringExtra("qr_code_type"))
         Log.d("qr_code_types",qr_code_types.toString())
-        var status: Boolean = false
-        var statusMessage: String = ""
+        var status : Array<Boolean> = emptyArray()
+        var statusMessage : Array<String> = emptyArray()
+        var statusCode : Array<Int> = emptyArray()
         for (type_idx in 0 until qr_code_types.length()) {
             val qr_code_type = JSONObject(qr_code_types.get(type_idx).toString())
             if (qr_code_type.get("type") == "cwt") {
@@ -279,14 +279,16 @@ class QRCodeAnalyzer(
                     if (resultJson != null) {
                         val ret = getFields(JSONObject(resultJson), field_mapper, bundle)
                         if (ret == false) {
-                            status = (status and false)
-                            statusMessage = "Fields Not Specified Correctly in Scanner Input"
-                            invalidQRCodesteps(intent, bundle, data, status, statusMessage)
+                            status = status.plus(false)
+                            statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                            statusCode = statusCode.plus(101)
+                            continue
                         }
                     }
                     else {
-                        status = false
-                        statusMessage = "QR Code Not Recognized"
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("QR Code Not Recognized")
+                        statusCode = statusCode.plus(102)
                         continue
                     }
 
@@ -305,16 +307,16 @@ class QRCodeAnalyzer(
                         result.putExtra(prefix + key, bundle.getString(key))
                     }
 
-                    status = true
-                    statusMessage = "Success"
-                    result.putExtra("status", status.toString())
-                    result.putExtra("status_message", statusMessage.toString())
+                    result.putExtra("status", "true")
+                    result.putExtra("status_message", "Success")
+                    result.putExtra("status_code", "100")
                     Log.d("Result Items", result.extras.toString())
                     activity.setResult(Activity.RESULT_OK, result)
                     activity.finish()
                 } catch (ex: Exception){
-                    status = false
-                    statusMessage = "QR Code Not Recognized"
+                    status = status.plus(false)
+                    statusMessage = statusMessage.plus("QR Code Not Recognized")
+                    statusCode = statusCode.plus(102)
                     continue
                 }
             } else {
@@ -361,15 +363,17 @@ class QRCodeAnalyzer(
                         if (jsonData != null) {
                             var ret = getFields(jsonData, field_mapper, bundle)
                             if (ret == false) {
-                                status = (status and false)
-                                statusMessage = "Fields Not Specified Correctly in Scanner Input"
-                                invalidQRCodesteps(intent, bundle, data, status, statusMessage)
+                                status = status.plus(false)
+                                statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                                statusCode = statusCode.plus(101)
+                                continue
 
                             }
                         }
                         else {
-                            status = false
-                            statusMessage = "QR Code Not Recognized"
+                            status = status.plus(false)
+                            statusMessage = statusMessage.plus("QR Code Not Recognized")
+                            statusCode = statusCode.plus(102)
                             continue
                         }
 
@@ -389,10 +393,9 @@ class QRCodeAnalyzer(
                             result.putExtra(prefix + key, bundle.getString(key))
                         }
 
-                        status = true
-                        statusMessage = "Success"
-                        result.putExtra("status", status.toString())
-                        result.putExtra("status_message", statusMessage.toString())
+                        result.putExtra("status", "true")
+                        result.putExtra("status_message", "Success")
+                        result.putExtra("status_code", "100")
                         activity.setResult(Activity.RESULT_OK, result)
                         activity.finish()
 
@@ -405,8 +408,9 @@ class QRCodeAnalyzer(
 //                        if (dialogShown == false)
 //                            showErrorMessage(ex.message.toString())
                         // Status Message Here
-                        status = false
-                        statusMessage = "QR Code Not Recognized"
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("QR Code Not Recognized")
+                        statusCode = statusCode.plus(102)
                         Log.d("Exception", ex.message.toString())
                         continue
                     } catch (ex: Exception) {
@@ -417,25 +421,50 @@ class QRCodeAnalyzer(
 //                        if (dialogShown == false)
 //                            showErrorMessage(ex.message.toString())
                         // Status Message Here
-                        status = false
-                        statusMessage = "Fields Not Specified Correctly in Scanner Input"
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                        statusCode = statusCode.plus(101)
                         Log.d("Exception", ex.message.toString())
                         continue
                     }
                 } catch (ex: JSONException) {
-                    status = false
-                    statusMessage = "QR Code Not Recognized"
+                    status = status.plus(false)
+                    statusMessage = statusMessage.plus("QR Code Not Recognized")
+                    statusCode = statusCode.plus(102)
                     Log.d("Exception", ex.message.toString())
                     continue
                 } catch (ex:Exception) {
-                    status = false
-                    statusMessage = "Fields Not Specified Correctly in Scanner Input"
+                    status = status.plus(false)
+                    statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                    statusCode = statusCode.plus(101)
                     Log.d("Exception", ex.message.toString())
                     continue
                 }
             }
         }
-        invalidQRCodesteps(intent, bundle, data, status, statusMessage)
+        Log.d("Size of status code", status.size.toString())
+        var final_status = false
+        var final_status_message = "Failure But Reason Unknown"
+        var final_status_code = 103
+        for (idx in statusCode.indices) {
+            Log.d("Status Codes", statusCode.get(idx).toString())
+            if (statusCode.get(idx) < final_status_code) {
+                final_status_code = statusCode.get(idx)
+                final_status_message = statusMessage.get(idx)
+                final_status = status.get(idx)
+            }
+        }
+        try {
+            val fieldMappers = JSONArray(intent.getStringExtra("field_mapper"))
+            val first_mapper = JSONObject(JSONObject(fieldMappers.get(0).toString()).get("mapper").toString())
+            for (key in first_mapper.keys()){
+                bundle.putString(key.toString(), "")
+            }
+        } catch (ex: Exception) {
+
+        }
+
+        invalidQRCodesteps(intent, bundle, data, final_status, final_status_message, final_status_code)
     }
 
     private fun getflattenedJSON(data: JSONObject) : JSONObject {
@@ -454,7 +483,7 @@ class QRCodeAnalyzer(
         return result
     }
 
-    private fun invalidQRCodesteps(intent: Intent, bundle: Bundle, data: String, status: Boolean, statusMessage: String) {
+    private fun invalidQRCodesteps(intent: Intent, bundle: Bundle, data: String, status: Boolean, statusMessage: String, statusCode: Int) {
         bundle.putString(ScannerConstants.MODE, mode)
         bundle.putString(ScannerConstants.QRCODE_TEXT, data)
 
@@ -470,6 +499,7 @@ class QRCodeAnalyzer(
         // Status Message Here
         result.putExtra("status", status.toString())
         result.putExtra("status_message", statusMessage.toString())
+        result.putExtra("status_code", statusCode.toString())
         activity.setResult(Activity.RESULT_OK, result)
         activity.finish()
     }
