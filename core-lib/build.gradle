@@ -10,9 +10,6 @@ apply plugin: 'kotlin-parcelize'
 
 
 
-def signingPropertiesFile = rootProject.file("signing.properties")
-def signingProperties = new Properties()
-signingProperties.load(new FileInputStream(signingPropertiesFile))
 
 androidGitVersion {
     baseCode 1
@@ -36,7 +33,6 @@ android {
 
         // Sentry Default DSN
         manifestPlaceholders = [dsn: 'https://90ebf03b06534e01a21f82c1b2e86ae2@sentry.newlogic.dev/4']
-        buildConfigField("String", "PUBLIC_KEY", signingProperties['PUBLIC_KEY'])
     }
 
     buildFeatures {
