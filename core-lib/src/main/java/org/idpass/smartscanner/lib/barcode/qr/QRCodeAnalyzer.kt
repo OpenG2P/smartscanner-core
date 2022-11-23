@@ -196,7 +196,7 @@ class QRCodeAnalyzer(
                     else {
                         status = false
                         statusMessage = "QR Code Not Recognized"
-                        invalidQRCodesteps(intent, bundle, data, status, statusMessage, 102)
+                        invalidQRCodesteps(intent, bundle, data, status, statusMessage, 105)
                     }
 
 
@@ -248,7 +248,14 @@ class QRCodeAnalyzer(
         }
     }
     private fun identifier(data: String, bundle: Bundle, intent: Intent) {
-        val qr_code_types = JSONArray(intent.getStringExtra("qr_code_type"))
+//        val qr_code_types = JSONArray(intent.getStringExtra("qr_code_type"))
+        val qr_code_types:JSONArray
+        try {
+            qr_code_types = JSONArray(intent.getStringExtra("qr_code_type"))
+        } catch (ex: Exception) {
+            invalidQRCodesteps(intent, bundle,data,false,"QR Code Types Not Specified Correctly",101)
+            return
+        }
         Log.d("qr_code_types",qr_code_types.toString())
         var status : Array<Boolean> = emptyArray()
         var statusMessage : Array<String> = emptyArray()
@@ -259,7 +266,15 @@ class QRCodeAnalyzer(
                 try {
                     Log.d("PH1 Version:", data.toString())
                     val qrcode_index = qr_code_type.get("qrcode_index").toString()
-                    val publicKey = getPublicKey(intent, qrcode_index)
+                    val publicKey:String
+                    try {
+                        publicKey = getPublicKey(intent, qrcode_index)
+                    } catch (ex: Exception) {
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("Public Key Not Specified Correctly")
+                        statusCode = statusCode.plus(102)
+                        continue
+                    }
                     Log.d("Public Key for PH1", publicKey.toString())
 
                     // PH1 decode logic
@@ -274,21 +289,29 @@ class QRCodeAnalyzer(
                     val keyFactory: KeyFactory = KeyFactory.getInstance("EdDSA")
                     val pubKey: PublicKey = keyFactory.generatePublic(keySpec)
                     var resultJson = decode(base45DecodedData, OneKey(pubKey, null))
-                    var field_mapper = JSONObject(getFieldMapper(intent, qrcode_index))
+                    var field_mapper:JSONObject
+                    try {
+                        field_mapper = JSONObject(getFieldMapper(intent, qrcode_index))
+                    } catch(ex:Exception) {
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                        statusCode = statusCode.plus(104)
+                        continue
+                    }
 
                     if (resultJson != null) {
                         val ret = getFields(JSONObject(resultJson), field_mapper, bundle)
                         if (ret == false) {
                             status = status.plus(false)
                             statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
-                            statusCode = statusCode.plus(101)
+                            statusCode = statusCode.plus(104)
                             continue
                         }
                     }
                     else {
                         status = status.plus(false)
                         statusMessage = statusMessage.plus("QR Code Not Recognized")
-                        statusCode = statusCode.plus(102)
+                        statusCode = statusCode.plus(105)
                         continue
                     }
 
@@ -316,14 +339,22 @@ class QRCodeAnalyzer(
                 } catch (ex: Exception){
                     status = status.plus(false)
                     statusMessage = statusMessage.plus("QR Code Not Recognized")
-                    statusCode = statusCode.plus(102)
+                    statusCode = statusCode.plus(105)
                     continue
                 }
             } else {
                 try {
                     Log.d("First Version:", data.toString())
                     val qrcode_index = qr_code_type.get("qrcode_index").toString()
-                    val publicKey = getPublicKey(intent, qrcode_index)
+                    val publicKey:String
+                    try {
+                        publicKey = getPublicKey(intent, qrcode_index)
+                    } catch (ex: Exception) {
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("Public Key Not Specified Correctly")
+                        statusCode = statusCode.plus(102)
+                        continue
+                    }
 
                     // Try block Here to check if data is valid.
                     var jsonData = JSONObject(data)
@@ -332,7 +363,15 @@ class QRCodeAnalyzer(
 
                     // Getting keys for new JSON
                     var signaturePayload = JSONObject()
-                    val ret = getSignatureMapper(intent, qrcode_index)
+                    val ret:Pair<String, Int>
+                    try {
+                        ret = getSignatureMapper(intent, qrcode_index)
+                    } catch (ex:Exception) {
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("Signature Mapper Not Specified Correctly")
+                        statusCode = statusCode.plus(103)
+                        continue
+                    }
                     val signatureFields = JSONArray(ret.first)
                     val pretty_spaces = ret.second
                     for (key_idx in 0 until signatureFields.length()) {
@@ -351,8 +390,15 @@ class QRCodeAnalyzer(
                     val publicKeyDecoded = Base64.decode(publicKey.toByteArray(), 0)
                     var signatureDecoded = Base64.decode(signature.toByteArray(), 0);
                     val ed = Ed25519Verify(publicKeyDecoded)
-                    var field_mapper = JSONObject(getFieldMapper(intent, qrcode_index))
-
+                    var field_mapper:JSONObject
+                    try {
+                        field_mapper = JSONObject(getFieldMapper(intent, qrcode_index))
+                    } catch(ex:Exception) {
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                        statusCode = statusCode.plus(104)
+                        continue
+                    }
                     try {
                         ed.verify(signatureDecoded, signaturePayloadPretty.toByteArray())
                         Log.d(
@@ -365,7 +411,7 @@ class QRCodeAnalyzer(
                             if (ret == false) {
                                 status = status.plus(false)
                                 statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
-                                statusCode = statusCode.plus(101)
+                                statusCode = statusCode.plus(104)
                                 continue
 
                             }
@@ -373,7 +419,7 @@ class QRCodeAnalyzer(
                         else {
                             status = status.plus(false)
                             statusMessage = statusMessage.plus("QR Code Not Recognized")
-                            statusCode = statusCode.plus(102)
+                            statusCode = statusCode.plus(105)
                             continue
                         }
 
@@ -410,7 +456,7 @@ class QRCodeAnalyzer(
                         // Status Message Here
                         status = status.plus(false)
                         statusMessage = statusMessage.plus("QR Code Not Recognized")
-                        statusCode = statusCode.plus(102)
+                        statusCode = statusCode.plus(105)
                         Log.d("Exception", ex.message.toString())
                         continue
                     } catch (ex: Exception) {
@@ -423,20 +469,20 @@ class QRCodeAnalyzer(
                         // Status Message Here
                         status = status.plus(false)
                         statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
-                        statusCode = statusCode.plus(101)
+                        statusCode = statusCode.plus(104)
                         Log.d("Exception", ex.message.toString())
                         continue
                     }
                 } catch (ex: JSONException) {
                     status = status.plus(false)
                     statusMessage = statusMessage.plus("QR Code Not Recognized")
-                    statusCode = statusCode.plus(102)
+                    statusCode = statusCode.plus(105)
                     Log.d("Exception", ex.message.toString())
                     continue
                 } catch (ex:Exception) {
                     status = status.plus(false)
                     statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
-                    statusCode = statusCode.plus(101)
+                    statusCode = statusCode.plus(104)
                     Log.d("Exception", ex.message.toString())
                     continue
                 }
@@ -445,7 +491,7 @@ class QRCodeAnalyzer(
         Log.d("Size of status code", status.size.toString())
         var final_status = false
         var final_status_message = "Failure But Reason Unknown"
-        var final_status_code = 103
+        var final_status_code = 106
         for (idx in statusCode.indices) {
             Log.d("Status Codes", statusCode.get(idx).toString())
             if (statusCode.get(idx) < final_status_code) {
@@ -527,9 +573,7 @@ class QRCodeAnalyzer(
     }
 
     private fun getSignatureMapper(intent: Intent, qrcode_index: String) : Pair<String, Int>{
-        Log.d("Reached Here", intent.getStringExtra("signature_mapper").toString())
         val signatureMappers = JSONArray(intent.getStringExtra("signature_mapper"))
-        Log.d("Signature Mapper", signatureMappers.toString())
         for (signature_mapper_idx in 0 until signatureMappers.length()){
             val signature_mapper_info = JSONObject(signatureMappers.get(signature_mapper_idx).toString())
             if(signature_mapper_info.get("qrcode_index").toString() == qrcode_index){
