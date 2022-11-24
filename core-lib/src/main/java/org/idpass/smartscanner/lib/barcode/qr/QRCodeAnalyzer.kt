@@ -214,9 +214,9 @@ class QRCodeAnalyzer(
                         result.putExtra(prefix + key, bundle.getString(key))
                     }
 
-                    result.putExtra("status", "true")
-                    result.putExtra("status_message", "Success")
-                    result.putExtra("status_code", "100")
+                    result.putExtra("QRCODE_SCAN_status", "true")
+                    result.putExtra("QRCODE_SCAN_status_message", "Success")
+                    result.putExtra("QRCODE_SCAN_status_code", "")
                     Log.d("Result Items", result.extras.toString())
                     activity.setResult(Activity.RESULT_OK, result)
                     activity.finish()
@@ -330,9 +330,9 @@ class QRCodeAnalyzer(
                         result.putExtra(prefix + key, bundle.getString(key))
                     }
 
-                    result.putExtra("status", "true")
-                    result.putExtra("status_message", "Success")
-                    result.putExtra("status_code", "100")
+                    result.putExtra("QRCODE_SCAN_status", "true")
+                    result.putExtra("QRCODE_SCAN_status_message", "Success")
+                    result.putExtra("QRCODE_SCAN_status_code", "")
                     Log.d("Result Items", result.extras.toString())
                     activity.setResult(Activity.RESULT_OK, result)
                     activity.finish()
@@ -439,9 +439,9 @@ class QRCodeAnalyzer(
                             result.putExtra(prefix + key, bundle.getString(key))
                         }
 
-                        result.putExtra("status", "true")
-                        result.putExtra("status_message", "Success")
-                        result.putExtra("status_code", "100")
+                        result.putExtra("QRCODE_SCAN_status", "true")
+                        result.putExtra("QRCODE_SCAN_status_message", "Success")
+                        result.putExtra("QRCODE_SCAN_status_code", "")
                         activity.setResult(Activity.RESULT_OK, result)
                         activity.finish()
 
@@ -543,9 +543,9 @@ class QRCodeAnalyzer(
             result.putExtra(prefix + key, bundle.getString(key))
         }
         // Status Message Here
-        result.putExtra("status", status.toString())
-        result.putExtra("status_message", statusMessage.toString())
-        result.putExtra("status_code", statusCode.toString())
+        result.putExtra("QRCODE_SCAN_status", status.toString())
+        result.putExtra("QRCODE_SCAN_status_message", statusMessage.toString())
+        result.putExtra("QRCODE_SCAN_status_code", statusCode.toString())
         activity.setResult(Activity.RESULT_OK, result)
         activity.finish()
     }
