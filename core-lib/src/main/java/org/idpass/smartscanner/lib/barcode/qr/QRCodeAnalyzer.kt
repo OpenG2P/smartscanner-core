@@ -342,7 +342,108 @@ class QRCodeAnalyzer(
                     statusCode = statusCode.plus(105)
                     continue
                 }
-            } else {
+            } else if(qr_code_type.get("type") == "json_plain") {
+                try {
+                    Log.d("First Version:", data.toString())
+                    val qrcode_index = qr_code_type.get("qrcode_index").toString()
+
+                    // Try block Here to check if data is valid.
+                    var jsonData = JSONObject(data)
+
+                    //var subject: String = jsonData.get("subject").toString()
+                    var field_mapper:JSONObject
+                    try {
+                        field_mapper = JSONObject(getFieldMapper(intent, qrcode_index))
+                    } catch(ex:Exception) {
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                        statusCode = statusCode.plus(104)
+                        continue
+                    }
+                    try {
+
+                        if (jsonData != null) {
+                            var ret = getFields(jsonData, field_mapper, bundle)
+                            if (ret == false) {
+                                status = status.plus(false)
+                                statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                                statusCode = statusCode.plus(104)
+                                continue
+
+                            }
+                        }
+                        else {
+                            status = status.plus(false)
+                            statusMessage = statusMessage.plus("QR Code Not Recognized")
+                            statusCode = statusCode.plus(105)
+                            continue
+                        }
+
+                        bundle.putString(ScannerConstants.MODE, mode)
+
+                        val result = Intent()
+                        val prefix =
+                            if (intent.hasExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)) {
+                                intent.getStringExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)
+                            } else {
+                                ""
+                            }
+                        result.putExtra(ScannerConstants.RESULT, bundle)
+                        // Copy all the values in the intent result to be compatible with other implementations than commcare
+                        for (key in bundle.keySet()) {
+                            Log.d("Final Bundle Item", "$key : ${bundle.getString(key)}")
+                            result.putExtra(prefix + key, bundle.getString(key))
+                        }
+
+                        result.putExtra("QRCODE_SCAN_status", "true")
+                        result.putExtra("QRCODE_SCAN_status_message", "Success")
+                        result.putExtra("QRCODE_SCAN_status_code", "")
+                        activity.setResult(Activity.RESULT_OK, result)
+                        activity.finish()
+
+                    } catch (ex: GeneralSecurityException) {
+                        Log.d(
+                            "${SmartScannerActivity.TAG}/SmartScanner",
+                            "Signature Verify Result : ${ex.message}"
+                        )
+
+//                        if (dialogShown == false)
+//                            showErrorMessage(ex.message.toString())
+                        // Status Message Here
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("QR Code Not Recognized")
+                        statusCode = statusCode.plus(105)
+                        Log.d("Exception", ex.message.toString())
+                        continue
+                    } catch (ex: Exception) {
+                        Log.d(
+                            "${SmartScannerActivity.TAG}/SmartScanner",
+                            "Signature Verify Result : ${ex.message}"
+                        )
+//                        if (dialogShown == false)
+//                            showErrorMessage(ex.message.toString())
+                        // Status Message Here
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                        statusCode = statusCode.plus(104)
+                        Log.d("Exception", ex.message.toString())
+                        continue
+                    }
+                } catch (ex: JSONException) {
+                    status = status.plus(false)
+                    statusMessage = statusMessage.plus("QR Code Not Recognized")
+                    statusCode = statusCode.plus(105)
+                    Log.d("Exception", ex.message.toString())
+                    continue
+                } catch (ex:Exception) {
+                    status = status.plus(false)
+                    statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                    statusCode = statusCode.plus(104)
+                    Log.d("Exception", ex.message.toString())
+                    continue
+                }
+            }
+            else {
                 try {
                     Log.d("First Version:", data.toString())
                     val qrcode_index = qr_code_type.get("qrcode_index").toString()
@@ -358,6 +459,7 @@ class QRCodeAnalyzer(
 
                     // Try block Here to check if data is valid.
                     var jsonData = JSONObject(data)
+
                     var subject: String = jsonData.get("subject").toString()
                     var signature: String = jsonData.get("signature").toString()
 
@@ -586,11 +688,37 @@ class QRCodeAnalyzer(
 
     private fun getFields(data: JSONObject, field_mapper: JSONObject, bundle: Bundle): Boolean {
         for (field in field_mapper.keys()) {
+
             try {
-                val fieldValue: String =
-                    getJSONElement(data, field_mapper.get(field).toString()).toString()
-                bundle.putString(field, fieldValue)
+                Log.d("Field:", field )
+
+                val mapped_field : String= field_mapper.get(field).toString()
+                Log.d("Mapped Field:", mapped_field )
+                if(mapped_field.contains('[')) {
+                    val root_field_part = mapped_field.split('.')[0].toString()
+                    val root_field = root_field_part.substring(0,root_field_part.indexOf('['))
+                    Log.d("Root Field:", root_field )
+                    val array_index_part = root_field_part.substring(root_field_part.indexOf('['), root_field_part.indexOf(']') + 1)
+                    Log.d("Array Index Part:", array_index_part )
+                    val array_index = array_index_part.substring(1,array_index_part.length-1).toInt()
+                    Log.d("Array Index:", array_index.toString() )
+                    val leaf_field = mapped_field.split('.')[1]
+                    Log.d("leaf_field", leaf_field )
+                    val root_field_value = getJSONElement(data, root_field).toString()
+                    Log.d("root_field_value:", root_field_value )
+//                    Log.d("root field type:", root_field_value::class.java.typeName )
+                    val root_field_json = JSONObject(JSONArray(root_field_value)[array_index].toString())
+                    val fieldValue : String = getJSONElement(root_field_json, leaf_field).toString()
+                    bundle.putString(field, fieldValue)
+                } else {
+                    val fieldValue: String = getJSONElement(data, field_mapper.get(field).toString()).toString()
+                    Log.d("Field Value:", fieldValue )
+                    bundle.putString(field, fieldValue)
+                }
+
             } catch (ex:Exception){
+
+                Log.d("Parsing Exception",ex.toString())
                 return false
             }
         }
