@@ -21,11 +21,15 @@ import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.util.Base64
 import android.util.Log
+import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AlertDialog
 import androidx.camera.core.ImageProxy
 import com.github.wnameless.json.flattener.JsonFlattener
-import com.google.gson.JsonParseException
+import com.google.crypto.tink.subtle.Ed25519Verify
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
@@ -34,24 +38,16 @@ import com.jayway.jsonpath.JsonPath
 import io.jsonwebtoken.Claims
 import io.jsonwebtoken.Jws
 import org.idpass.smartscanner.api.ScannerConstants
+import org.idpass.smartscanner.lib.BuildConfig
+import org.idpass.smartscanner.lib.R
 import org.idpass.smartscanner.lib.SmartScannerActivity
 import org.idpass.smartscanner.lib.scanner.BaseImageAnalyzer
 import org.idpass.smartscanner.lib.scanner.config.Config
 import org.idpass.smartscanner.lib.scanner.config.Modes
-import org.idpass.smartscanner.lib.utils.BitmapUtils
-import org.idpass.smartscanner.lib.utils.GzipUtils
-import org.idpass.smartscanner.lib.utils.JWTUtils
-import org.idpass.smartscanner.lib.utils.JWTUtils.getJsonBody
-import org.idpass.smartscanner.lib.utils.JWTUtils.getJsonHeader
-import org.idpass.smartscanner.lib.utils.JWTUtils.isDefaultConfigPublicKey
-import org.idpass.smartscanner.lib.utils.JWTUtils.isJWT
-import org.idpass.smartscanner.lib.utils.extension.setBrightness
-import org.idpass.smartscanner.lib.utils.extension.setContrast
+import org.json.JSONArray
 import org.json.JSONObject
-import java.io.ByteArrayInputStream
-import java.lang.RuntimeException
+import java.security.GeneralSecurityException
 import java.util.zip.ZipException
-
 
 class QRCodeAnalyzer(
     override val activity: Activity,
@@ -62,7 +58,10 @@ class QRCodeAnalyzer(
     private var isJson: Boolean? = false,
     private var jsonPath: String? = null
 ) : BaseImageAnalyzer() {
+    var context:Context = activity
+    var dialogShown = false
 
+    @RequiresApi(Build.VERSION_CODES.O)
     @SuppressLint("UnsafeExperimentalUsageError", "UnsafeOptInUsageError")
     override fun analyze(imageProxy: ImageProxy) {
         val bitmap = BitmapUtils.getBitmap(imageProxy)
@@ -117,80 +116,8 @@ class QRCodeAnalyzer(
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun sendResult(rawValue: String?, rawBytes: ByteArray?) {
-
-        try {
-            val intent = Intent()
-
-            val result: String? = when (rawValue?.isJWT()) {
-                true -> {
-                    val value = getValueJWT(rawValue)
-                    intent.putExtra(SmartScannerActivity.SCANNER_HEADER_RESULT, value.getJsonHeader().toString())
-                    intent.putExtra(SmartScannerActivity.SCANNER_SIGNATURE_VERIFICATION, true)
-
-
-                    // checks for config result jwt
-                    val jsonResult = JSONObject(value.getJsonBody().toString())
-
-                    if (jsonResult.has("conf") and jsonResult.has("pub")) {
-
-                        val preference = activity.getSharedPreferences(Config.SHARED, Context.MODE_PRIVATE)
-                        val editor = preference?.edit()
-
-                        editor?.remove(Config.CONFIG_PROFILE_NAME)?.apply()
-                        editor?.putString(Config.CONFIG_PROFILE_NAME, jsonResult.getString("conf"))
-
-                        editor?.remove(Config.CONFIG_PUB_KEY)?.apply()
-                        editor?.putString(Config.CONFIG_PUB_KEY, jsonResult.getString("pub"))
-
-                        editor?.apply()
-
-                        intent.putExtra(SmartScannerActivity.SCANNER_JWT_CONFIG_UPDATE, true)
-                    }
-
-                    value.getJsonBody().toString()
-                }
-                else -> getGzippedData(rawBytes) ?: rawValue
-
-            }
-
-            if (isJson == true && result != null && result != rawValue) {
-                jsonPath?.let { path ->
-                    val ctx = JsonPath.parse(result)
-                    intent.putExtra(
-                        ScannerConstants.QRCODE_JSON_VALUE,
-                        ctx.read<Any>(path).toString()
-                    )
-                }
-                val flattenMap = flattenJson(result)
-                for ((k, v) in flattenMap) {
-                    intent.putExtra(k, v)
-                }
-            }
-
-
-
-            Log.d(SmartScannerActivity.TAG, "raw " + rawValue.toString())
-            Log.d(SmartScannerActivity.TAG, "Success from QRCODE")
-            Log.d(SmartScannerActivity.TAG, "value: $result")
-            intent.putExtra(ScannerConstants.MODE, mode)
-            intent.putExtra(SmartScannerActivity.SCANNER_IMAGE_TYPE, imageResultType)
-            intent.putExtra(SmartScannerActivity.SCANNER_RESULT, result)
-            intent.putExtra(SmartScannerActivity.SCANNER_RAW_RESULT, rawValue)
-
-
-            activity.setResult(Activity.RESULT_OK, intent)
-            activity.finish()
-        } catch (ex : Exception) {
-            Log.d(SmartScannerActivity.TAG, "Exception: ${ex.localizedMessage}")
-
-            intent.putExtra(SmartScannerActivity.SCANNER_FAIL_RESULT, ex.localizedMessage)
-            activity.setResult(Activity.RESULT_OK, intent)
-            activity.finish()
-        }
-    }
-
-    private fun sendBundleResult(rawValue: String?, rawBytes: ByteArray?) {
         // parse and read qr data and add to bundle intent
         val bundle = Bundle()
         Log.d(SmartScannerActivity.TAG, "Success from QRCODE")
@@ -229,20 +156,111 @@ class QRCodeAnalyzer(
             "${SmartScannerActivity.TAG}/SmartScanner",
             "bundle: $bundle"
         )
-        bundle.putString(ScannerConstants.MODE, mode)
-        bundle.putString(ScannerConstants.QRCODE_TEXT, data)
 
-        val result = Intent()
-        val prefix = if (intent.hasExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)) {
-            intent.getStringExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)
-        } else { "" }
-        result.putExtra(ScannerConstants.RESULT, bundle)
-        // Copy all the values in the intent result to be compatible with other implementations than commcare
-        for (key in bundle.keySet()) {
-            result.putExtra(prefix + key, bundle.getString(key))
+       if (data != null && intent.action ==  ScannerConstants.IDPASS_SMARTSCANNER_ODK_QRCODE_INTENT)
+        {
+            var jsonData = JSONObject(data)
+            var subject:String = jsonData.get("subject").toString()
+            var signature:String = jsonData.get("si").toString()
+            val publicKey = BuildConfig.PUBLIC_KEY
+
+            val publicKeyDecoded = Base64.decode(publicKey.toByteArray(),0)
+            var signatureDecoded = Base64.decode(signature.toByteArray(),0);
+            val ed = Ed25519Verify(publicKeyDecoded)
+
+            jsonData.keys().forEach {
+                if(jsonData.get(it) !is JSONObject){
+                    bundle.putString(it, jsonData.get(it).toString())
+                }
+            }
+            var subjectJSON = JSONObject(subject)
+            subjectJSON.keys().forEach {
+                if(subjectJSON.get(it) !is JSONArray){
+                    bundle.putString(it, subjectJSON.get(it).toString())
+                }
+            }
+            var dIssued = bundle.getString("d")
+            var sfx = bundle.getString("sf")
+            var ln = bundle.getString("ln")
+            var fn = bundle.getString("fn")
+            var mn = bundle.getString("mn")
+            var sx = bundle.getString("sx")
+            var bf = bundle.getString("bf")
+            var dob2 = bundle.getString("dob2")
+            var pob = bundle.getString("pob")
+            var PCN = bundle.getString("PCN")
+            var img = bundle.getString("img")
+            subject = "{ \"i\": \"PSA\"," +
+                    " \"d\": \""+dIssued+"\"," +
+                    " \"sb\": {   \"sf\": \""+sfx+"\",   " +
+                    "\"ln\": \""+ln+"\",   "+
+                    "\"fn\": \""+fn+"\",   "+
+                    "\"mn\": \""+mn+"\",   "+
+                    "\"s\": \""+sx+"\",   "+
+                    "\"BF\": \""+bf+"\",   "+
+                    "\"DOB\": \""+dob2+"\",   "+
+                    "\"POB\": \""+pob+"\",   "+
+                    "\"PCN\": \""+PCN+"\" },"+
+                    "\"img\": \""+img+"\"}";
+
+
+            try{
+
+                ed.verify(signatureDecoded, subject.toByteArray())
+                Log.d(
+                    "${SmartScannerActivity.TAG}/SmartScanner",
+                    "Signature Verify Result : Success"
+                )
+
+                bundle.putString(ScannerConstants.MODE, mode)
+
+                val result = Intent()
+                val prefix = if (intent.hasExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)) {
+                    intent.getStringExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)
+                } else { "" }
+                result.putExtra(ScannerConstants.RESULT, bundle)
+                // Copy all the values in the intent result to be compatible with other implementations than commcare
+                for (key in bundle.keySet()) {
+//                    Log.d("Final Bundle Item", "$key : ${bundle.getString(key)}")
+                    result.putExtra(prefix + key, bundle.getString(key))
+                }
+                activity.setResult(Activity.RESULT_OK, result)
+                activity.finish()
+
+            } catch ( ex:GeneralSecurityException) {
+                Log.d(
+                    "${SmartScannerActivity.TAG}/SmartScanner",
+                    "Signature Verify Result : ${ex.message}"
+                )
+
+                if(dialogShown == false)
+                    showErrorMessage(ex.message.toString())
+            } catch (ex:Exception){
+                Log.d(
+                    "${SmartScannerActivity.TAG}/SmartScanner",
+                    "Signature Verify Result : ${ex.message}"
+                )
+                if(dialogShown == false)
+                    showErrorMessage(ex.message.toString())
+            }
+        } else {
+            bundle.putString(ScannerConstants.MODE, mode)
+            bundle.putString(ScannerConstants.QRCODE_TEXT, data)
+
+            val result = Intent()
+            val prefix = if (intent.hasExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)) {
+                intent.getStringExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)
+            } else { "" }
+            result.putExtra(ScannerConstants.RESULT, bundle)
+            // Copy all the values in the intent result to be compatible with other implementations than commcare
+            for (key in bundle.keySet()) {
+                result.putExtra(prefix + key, bundle.getString(key))
+            }
+            activity.setResult(Activity.RESULT_OK, result)
+            activity.finish()
         }
-        activity.setResult(Activity.RESULT_OK, result)
-        activity.finish()
+
+
     }
 
     private fun getGzippedData(rawBytes: ByteArray?) : String? {
@@ -272,32 +290,18 @@ class QRCodeAnalyzer(
         )
         return map
     }
-
-    private fun getValueJWT(rawValue: String): Jws<Claims> {
-
-        // identify which public key to use first
-        val preference = activity.getSharedPreferences(Config.SHARED, Context.MODE_PRIVATE)
-        val publicKey = preference.getString(Config.CONFIG_PUB_KEY, null)
-
-        return try {
-            JWTUtils.getWithSignedKey(rawValue, publicKey)
-
-        } catch (ex : Exception) {
-            // Fallback goal is to allow multiple save of the config
-
-            // We only fallback if the publicKey saved is not the default public key
-            if (publicKey != null && !publicKey.isDefaultConfigPublicKey()) {
-                // Lets add fallback here for JWT rawValue
-                val valueJws = JWTUtils.getWithSignedKey(rawValue, null)
-                // and we only allow fallback if payload is conf and public
-                if (valueJws.body.containsKey("conf")) {
-                    return valueJws
-                }
+    private fun showErrorMessage(message:String) {
+        dialogShown = true
+        val dialog: AlertDialog.Builder = AlertDialog.Builder(context)
+        dialog.setMessage(message)
+        dialog.setNegativeButton(R.string.label_close) { alert, which ->
+            run {
+                dialogShown = false
             }
-
-            // otherwise lets throw the exception
-            throw ex
         }
+        dialog.show()
     }
+
+
 
 }
