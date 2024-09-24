@@ -22,6 +22,9 @@ enum class Modes (val value : String) {
     CAPTURE_ONLY("capture-only"),
     IDPASS_LITE("idpass-lite"),
     MRZ("mrz"),
+    OCR("ocr"),
     NFC_SCAN("nfc-scan"),
-    QRCODE("qrcode")
+    PDF_417("pdf417"),
+    QRCODE("qrcode"),
+    QRCODE_CONFIG("qrcode-config")
 }
