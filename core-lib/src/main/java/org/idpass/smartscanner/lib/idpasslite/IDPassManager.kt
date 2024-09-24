@@ -25,27 +25,46 @@ import android.widget.Toast
 import org.api.proto.Certificates
 import org.api.proto.KeySet
 import org.idpass.lite.Card
+import org.idpass.lite.IDPassHelper
 import org.idpass.lite.IDPassReader
-import org.idpass.lite.android.IDPassLiteHelper
 import org.idpass.lite.exceptions.CardVerificationException
 import org.idpass.lite.exceptions.InvalidCardException
 import org.idpass.lite.exceptions.InvalidKeyException
 import org.idpass.smartscanner.api.ScannerConstants
 import org.idpass.smartscanner.lib.SmartScannerActivity
-import org.idpass.smartscanner.lib.platform.utils.DateUtils
 import org.idpass.smartscanner.lib.scanner.config.Modes
+import org.idpass.smartscanner.lib.utils.DateUtils
+import com.google.protobuf.ByteString
+
+import org.api.proto.byteArray
+import org.idpass.lite.proto.Certificate
 
 
 object IDPassManager {
 
     fun getIDPassReader(): IDPassReader {
-        // Initialize needed ks and rootcert from demo key values
-        val keysetbuf = IDPassLiteHelper.generateAndroidKeyset()
-        val rootcertbuf = IDPassLiteHelper.generateAndroidRootcert()
-        val ks = KeySet.parseFrom(keysetbuf)
-        val rootcert = Certificates.parseFrom(rootcertbuf)
-        // Initialize reader with ks and rootcert
-        return IDPassReader(ks, rootcert)
+        // Generate cryptographic keys and initialize a keyset using these keys
+        val encryptionkey = IDPassHelper.generateEncryptionKey()
+        val signaturekey = IDPassHelper.generateSecretSignatureKey()
+        val publicVerificationKey = IDPassHelper.getPublicKey(signaturekey)
+
+        val keyset = KeySet.newBuilder()
+            .setEncryptionKey(ByteString.copyFrom(encryptionkey))
+            .setSignatureKey(ByteString.copyFrom(signaturekey))
+            .addVerificationKeys(
+                byteArray.newBuilder()
+                    .setTyp(byteArray.Typ.ED25519PUBKEY)
+                    .setVal(ByteString.copyFrom(publicVerificationKey)).build()
+            )
+            .build()
+
+        // Generate certificates
+        val rootkey = IDPassHelper.generateSecretSignatureKey()
+        val rootcert: Certificate = IDPassReader.generateRootCertificate(rootkey)
+        val rootcerts: Certificates = Certificates.newBuilder().addCert(rootcert).build()
+
+        // Initialize IDPassReader object with the keyset and certificate
+        return IDPassReader(keyset, rootcerts)
     }
 
     fun verifyCard(
@@ -105,6 +124,7 @@ object IDPassManager {
         val data = Intent()
         Log.d(SmartScannerActivity.TAG, "Success from IDPASS LITE")
         Log.d(SmartScannerActivity.TAG, "value: $result")
+        data.putExtra(ScannerConstants.MODE, Modes.IDPASS_LITE.value)
         data.putExtra(SmartScannerActivity.SCANNER_RESULT_BYTES, result)
         activity.setResult(Activity.RESULT_OK, data)
         activity.finish()

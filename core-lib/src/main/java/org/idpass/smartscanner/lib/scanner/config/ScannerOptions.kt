@@ -33,6 +33,8 @@ data class ScannerOptions(
     val barcodeOptions: BarcodeOptions? = null,
     val captureOptions: CaptureOptions? = null,
     val nfcOptions: NFCOptions? = null,
+    val qrCodeOptions: QRcodeOptions? = null,
+    val ocrOptions: OCROptions? = null,
     val sentryLogger: SentryLogger? = null,
 ) : Parcelable {
     companion object {
@@ -75,6 +77,11 @@ data class ScannerOptions(
             config = Config.default
         )
 
+        val defaultForOCR = ScannerOptions(
+            mode = OCR.value,
+            config = Config.default
+        )
+
         fun defaultForODK(action : String?) : ScannerOptions? {
             return when (action) {
                 // barcode
@@ -92,6 +99,9 @@ data class ScannerOptions(
                 // qrcode
                 ScannerConstants.IDPASS_SMARTSCANNER_QRCODE_INTENT,
                 ScannerConstants.IDPASS_SMARTSCANNER_ODK_QRCODE_INTENT -> defaultForQRCode
+                // ocr
+                ScannerConstants.IDPASS_SMARTSCANNER_OCR_INTENT,
+                ScannerConstants.IDPASS_SMARTSCANNER_ODK_OCR_INTENT -> defaultForOCR
                 else -> null
             }
         }

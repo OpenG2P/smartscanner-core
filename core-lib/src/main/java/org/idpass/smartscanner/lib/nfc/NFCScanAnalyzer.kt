@@ -28,11 +28,13 @@ import org.idpass.smartscanner.lib.mrz.MRZCleaner
 import org.idpass.smartscanner.lib.mrz.MRZResult
 import org.idpass.smartscanner.lib.nfc.NFCActivity.Companion.FOR_SMARTSCANNER_APP
 import org.idpass.smartscanner.lib.nfc.details.IntentData
-import org.idpass.smartscanner.lib.platform.extension.cacheImagePath
-import org.idpass.smartscanner.lib.platform.extension.cacheImageToLocal
-import org.idpass.smartscanner.lib.platform.extension.encodeBase64
 import org.idpass.smartscanner.lib.scanner.config.ImageResultType
 import org.idpass.smartscanner.lib.scanner.config.Modes
+import org.idpass.smartscanner.lib.utils.extension.cacheImagePath
+import org.idpass.smartscanner.lib.utils.extension.cacheImageToLocal
+import org.idpass.smartscanner.lib.utils.extension.cropCenter
+import org.idpass.smartscanner.lib.utils.extension.encodeBase64
+import java.io.File
 
 open class NFCScanAnalyzer(
     override val activity: Activity,
@@ -49,9 +51,8 @@ open class NFCScanAnalyzer(
     isMLKit: Boolean,
     format: String? = null,
     analyzeStart: Long,
-    onConnectSuccess: (String) -> Unit,
-    onConnectFail: (String) -> Unit
-) : MRZAnalyzer(activity, intent, mode, label, language, locale, withMrzPhoto, withPhoto, captureLog, enableLogging, isMLKit, imageResultType, format, analyzeStart, onConnectSuccess, onConnectFail) {
+    isShowGuide: Boolean? = false
+) : MRZAnalyzer(activity, intent, mode, label, language, locale, withMrzPhoto, withPhoto, captureLog, enableLogging, isMLKit, imageResultType, format, analyzeStart, isShowGuide) {
 
     override fun processResult(result: String, bitmap: Bitmap, rotation: Int) {
         val mrzResult =  MRZResult.formatMrzResult(MRZCleaner.parseAndClean(result))
@@ -64,9 +65,13 @@ open class NFCScanAnalyzer(
                 intent.action == ScannerConstants.IDPASS_SMARTSCANNER_ODK_NFC_INTENT -> nfcIntent.putExtra(ScannerConstants.NFC_ACTION, intent.action)
             }
             if (withMrzPhoto) {
-                val imagePathFile = activity.cacheImagePath()
-                bitmap.cacheImageToLocal(imagePathFile, rotation)
-                val imageString = if (imageResultType == ImageResultType.BASE_64.value) bitmap.encodeBase64(rotation) else imagePathFile
+                val imagePath = activity.cacheImagePath()
+                bitmap.cropCenter().cacheImageToLocal(imagePath,
+                    rotation,
+                    if (imageResultType == ImageResultType.BASE_64.value) 40 else 80
+                )
+                val imageFile = File(imagePath)
+                val imageString = if (imageResultType == ImageResultType.BASE_64.value) imageFile.encodeBase64() else imagePath
                 nfcIntent.putExtra(IntentData.KEY_MRZ_PHOTO, imageString)
             }
             nfcIntent.putExtra(ScannerConstants.NFC_MRZ_STRING, mrzString)

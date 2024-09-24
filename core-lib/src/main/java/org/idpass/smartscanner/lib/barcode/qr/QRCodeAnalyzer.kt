@@ -35,14 +35,14 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import com.jayway.jsonpath.JsonPath
+import io.jsonwebtoken.Claims
+import io.jsonwebtoken.Jws
 import org.idpass.smartscanner.api.ScannerConstants
 import org.idpass.smartscanner.lib.BuildConfig
 import org.idpass.smartscanner.lib.R
 import org.idpass.smartscanner.lib.SmartScannerActivity
-import org.idpass.smartscanner.lib.platform.BaseImageAnalyzer
-import org.idpass.smartscanner.lib.platform.extension.setContrast
-import org.idpass.smartscanner.lib.platform.utils.BitmapUtils
-import org.idpass.smartscanner.lib.platform.utils.GzipUtils
+import org.idpass.smartscanner.lib.scanner.BaseImageAnalyzer
+import org.idpass.smartscanner.lib.scanner.config.Config
 import org.idpass.smartscanner.lib.scanner.config.Modes
 import org.json.JSONArray
 import org.json.JSONObject
@@ -52,7 +52,11 @@ import java.util.zip.ZipException
 class QRCodeAnalyzer(
     override val activity: Activity,
     override val intent: Intent,
-    override val mode: String = Modes.QRCODE.value
+    override val mode: String = Modes.QRCODE.value,
+    private val imageResultType: String,
+    private var isGzipped: Boolean? = null,
+    private var isJson: Boolean? = false,
+    private var jsonPath: String? = null
 ) : BaseImageAnalyzer() {
     var context:Context = activity
     var dialogShown = false
@@ -67,6 +71,7 @@ class QRCodeAnalyzer(
             bf.apply {
                 // Increase contrast and brightness for better image processing and reduce Moiré effect
                 setContrast(1.5F)
+                setBrightness(5F)
             }
             val barcodeFormat = Barcode.FORMAT_QR_CODE
             val options = BarcodeScannerOptions.Builder().setBarcodeFormats(barcodeFormat).build()
@@ -83,14 +88,15 @@ class QRCodeAnalyzer(
                     )
                     if (barcodes.isNotEmpty()) {
                         rawValue = barcodes[0].rawValue
-                        when (intent.action) {
-                            ScannerConstants.IDPASS_SMARTSCANNER_QRCODE_INTENT,
-                            ScannerConstants.IDPASS_SMARTSCANNER_ODK_QRCODE_INTENT, -> {
-                                sendResult(
-                                    rawValue = rawValue,
-                                    rawBytes = barcodes[0].rawBytes
-                                )
-                            }
+                        if (intent.action == ScannerConstants.IDPASS_SMARTSCANNER_QRCODE_INTENT ||
+                            intent.action == ScannerConstants.IDPASS_SMARTSCANNER_ODK_QRCODE_INTENT){
+                            sendBundleResult(
+                                rawValue = rawValue,
+                                rawBytes = barcodes[0].rawBytes
+                            )
+                        } else {
+                            sendResult( rawValue = rawValue, rawBytes = barcodes[0].rawBytes)
+                            scanner.close()
                         }
                     } else {
                         Log.d(
@@ -120,11 +126,17 @@ class QRCodeAnalyzer(
         val isJson = if (isOdk) intent.getStringExtra(ScannerConstants.JSON_ENABLED) == "1" else intent.getBooleanExtra(ScannerConstants.JSON_ENABLED, false)
         val jsonPath = intent.getStringExtra(ScannerConstants.JSON_PATH)
         // check gzipped parameters for bundle return result
-        var data : String? = if (isGzipped) {
-            getGzippedData(rawBytes)
-        } else {
-            rawValue
+        var data : String? = when (isGzipped) {
+            true -> getGzippedData(rawBytes)
+            else -> {
+                if (rawValue?.isJWT() == true) {
+                    getValueJWT(rawValue).getJsonBody().toString()
+                } else {
+                    rawValue
+                }
+            }
         }
+
         // check json parameters for bundle return result
         if (isJson) {
             if (data != null) {
@@ -254,7 +266,8 @@ class QRCodeAnalyzer(
     private fun getGzippedData(rawBytes: ByteArray?) : String? {
         var data: String? = null
         try {
-            data = if (rawBytes != null)  GzipUtils.decompress(rawBytes) else null
+            val inputStream = ByteArrayInputStream(rawBytes)
+            data = if (rawBytes != null && GzipUtils.isGZipped(inputStream)) GzipUtils.decompress(rawBytes) else null
         } catch (ez : ZipException) {
             ez.printStackTrace()
         }
@@ -288,6 +301,7 @@ class QRCodeAnalyzer(
         }
         dialog.show()
     }
+
 
 
 }
