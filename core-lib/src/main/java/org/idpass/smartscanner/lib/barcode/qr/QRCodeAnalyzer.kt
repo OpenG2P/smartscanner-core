@@ -44,7 +44,7 @@ import net.i2p.crypto.eddsa.EdDSASecurityProvider
 import nl.minvws.encoding.Base45
 import org.apache.commons.codec.binary.Base64 as B64
 import org.idpass.smartscanner.api.ScannerConstants
-import org.idpass.smartscanner.lib.BuildConfig
+//import org.idpass.smartscanner.lib.BuieldConfig
 import org.idpass.smartscanner.lib.R
 import org.idpass.smartscanner.lib.SmartScannerActivity
 import org.idpass.smartscanner.lib.scanner.BaseImageAnalyzer
@@ -273,7 +273,64 @@ class QRCodeAnalyzer(
         var statusCode : Array<Int> = emptyArray()
         for (type_idx in 0 until qr_code_types.length()) {
             val qr_code_type = JSONObject(qr_code_types.get(type_idx).toString())
-            if (qr_code_type.get("type") == "cwt") {
+            if (qr_code_type.get("type") == "txt_plain") {
+                try {
+                    val qrcode_index = qr_code_type.get("qrcode_index").toString()
+                    var field_mapper:JSONObject
+                    try {
+                        field_mapper = JSONObject(getFieldMapper(intent, qrcode_index))
+                    } catch(ex:Exception) {
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                        statusCode = statusCode.plus(104)
+                        continue
+                    }
+
+                    if (data != null) {
+                        val ret = getFieldsFromPlainString(data, field_mapper, bundle)
+                        if (ret == false) {
+                            status = status.plus(false)
+                            statusMessage = statusMessage.plus("Fields Not Specified Correctly in Scanner Input")
+                            statusCode = statusCode.plus(104)
+                            continue
+                        }
+                    }
+                    else {
+                        status = status.plus(false)
+                        statusMessage = statusMessage.plus("QR Code Not Recognized")
+                        statusCode = statusCode.plus(105)
+                        continue
+                    }
+
+
+                    // PH1 decode logic ends here
+                    val result = Intent()
+                    val prefix = if (intent.hasExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)) {
+                        intent.getStringExtra(ScannerConstants.IDPASS_ODK_PREFIX_EXTRA)
+                    } else {
+                        ""
+                    }
+                    result.putExtra(ScannerConstants.RESULT, bundle)
+                    // Copy all the values in the intent result to be compatible with other implementations than commcare
+                    for (key in bundle.keySet()) {
+                        Log.d("Final Bundle Item", "$key : ${bundle.getString(key)}")
+                        result.putExtra(prefix + key, bundle.getString(key))
+                    }
+
+                    result.putExtra("QRCODE_SCAN_status", "true")
+                    result.putExtra("QRCODE_SCAN_status_message", "Success")
+                    result.putExtra("QRCODE_SCAN_status_code", "")
+                    Log.d("Result Items", result.extras.toString())
+                    activity.setResult(Activity.RESULT_OK, result)
+                    activity.finish()
+                } catch (ex: Exception){
+                    status = status.plus(false)
+                    statusMessage = statusMessage.plus("QR Code Not Recognized")
+                    statusCode = statusCode.plus(105)
+                    continue
+                }
+            }
+            else if (qr_code_type.get("type") == "cwt") {
                 try {
                     Log.d("PH1 Version:", data.toString())
                     val qrcode_index = qr_code_type.get("qrcode_index").toString()
@@ -701,22 +758,16 @@ class QRCodeAnalyzer(
         for (field in field_mapper.keys()) {
 
             try {
-                Log.d("Field:", field )
 
                 val mapped_field : String= field_mapper.get(field).toString()
                 Log.d("Mapped Field:", mapped_field )
                 if(mapped_field.contains('[')) {
                     val root_field_part = mapped_field.split('.')[0].toString()
                     val root_field = root_field_part.substring(0,root_field_part.indexOf('['))
-                    Log.d("Root Field:", root_field )
                     val array_index_part = root_field_part.substring(root_field_part.indexOf('['), root_field_part.indexOf(']') + 1)
-                    Log.d("Array Index Part:", array_index_part )
                     val array_index = array_index_part.substring(1,array_index_part.length-1).toInt()
-                    Log.d("Array Index:", array_index.toString() )
                     val leaf_field = mapped_field.split('.')[1]
-                    Log.d("leaf_field", leaf_field )
                     val root_field_value = getJSONElement(data, root_field).toString()
-                    Log.d("root_field_value:", root_field_value )
 //                    Log.d("root field type:", root_field_value::class.java.typeName )
                     val root_field_json = JSONObject(JSONArray(root_field_value)[array_index].toString())
                     val fieldValue : String = getJSONElement(root_field_json, leaf_field).toString()
@@ -725,6 +776,30 @@ class QRCodeAnalyzer(
                     val fieldValue: String = getJSONElement(data, field_mapper.get(field).toString()).toString()
                     Log.d("Field Value:", fieldValue )
                     bundle.putString(field, fieldValue)
+                }
+
+            } catch (ex:Exception){
+
+                Log.d("Parsing Exception",ex.toString())
+                return false
+            }
+        }
+        return true
+    }
+
+
+    private fun getFieldsFromPlainString(data: String, field_mapper: JSONObject, bundle: Bundle): Boolean {
+        for (field in field_mapper.keys()) {
+
+            try {
+                val mapped_field : String= field_mapper.get(field).toString()
+                val scanned_field_set  = data.split(",")
+                for(scanned_field in scanned_field_set) {
+                    val scanned_field_key= scanned_field.split(":")[0]
+                    val scanned_field_value= scanned_field.split(":")[1]
+                    if(scanned_field_key.trim() == mapped_field.trim()) {
+                        bundle.putString(field, scanned_field_value)
+                    }
                 }
 
             } catch (ex:Exception){
