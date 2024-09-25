@@ -44,12 +44,19 @@ import net.i2p.crypto.eddsa.EdDSASecurityProvider
 import nl.minvws.encoding.Base45
 import org.apache.commons.codec.binary.Base64 as B64
 import org.idpass.smartscanner.api.ScannerConstants
-//import org.idpass.smartscanner.lib.BuieldConfig
+import org.idpass.smartscanner.lib.BuildConfig
 import org.idpass.smartscanner.lib.R
 import org.idpass.smartscanner.lib.SmartScannerActivity
 import org.idpass.smartscanner.lib.scanner.BaseImageAnalyzer
 import org.idpass.smartscanner.lib.scanner.config.Config
 import org.idpass.smartscanner.lib.scanner.config.Modes
+import org.idpass.smartscanner.lib.utils.BitmapUtils
+import org.idpass.smartscanner.lib.utils.GzipUtils
+import org.idpass.smartscanner.lib.utils.JWTUtils
+import org.idpass.smartscanner.lib.utils.JWTUtils.isDefaultConfigPublicKey
+import org.idpass.smartscanner.lib.utils.JWTUtils.isJWT
+import org.idpass.smartscanner.lib.utils.extension.setBrightness
+import org.idpass.smartscanner.lib.utils.extension.setContrast
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -57,6 +64,7 @@ import org.json.simple.JSONObject as JsonObject
 import org.json.simple.parser.JSONParser
 import se.sics.ace.cwt.CWT
 import se.sics.ace.cwt.CwtCryptoCtx
+import java.io.ByteArrayInputStream
 import java.security.GeneralSecurityException
 import java.security.KeyFactory
 import java.security.PublicKey
@@ -64,7 +72,9 @@ import java.security.Security
 import java.security.spec.X509EncodedKeySpec
 import java.util.zip.ZipException
 import java.io.IOException
-
+import io.jsonwebtoken.Jws
+import io.jsonwebtoken.Claims
+import org.idpass.smartscanner.lib.utils.JWTUtils.getJsonBody
 
 class QRCodeAnalyzer(
     override val activity: Activity,
@@ -107,7 +117,7 @@ class QRCodeAnalyzer(
                         rawValue = barcodes[0].rawValue
                         if (intent.action == ScannerConstants.IDPASS_SMARTSCANNER_QRCODE_INTENT ||
                             intent.action == ScannerConstants.IDPASS_SMARTSCANNER_ODK_QRCODE_INTENT){
-                            sendBundleResult(
+                            sendResult(
                                 rawValue = rawValue,
                                 rawBytes = barcodes[0].rawBytes
                             )
@@ -893,6 +903,33 @@ class QRCodeAnalyzer(
         }
     }
 
+    private fun getValueJWT(rawValue: String): Jws<Claims> {
+
+        // identify which public key to use first
+        val preference = activity.getSharedPreferences(Config.SHARED, Context.MODE_PRIVATE)
+        val publicKey = preference.getString(Config.CONFIG_PUB_KEY, null)
+
+        return try {
+            JWTUtils.getWithSignedKey(rawValue, publicKey)
+
+        } catch (ex : Exception) {
+            // Fallback goal is to allow multiple save of the config
+
+            // We only fallback if the publicKey saved is not the default public key
+            if (publicKey != null && !publicKey.isDefaultConfigPublicKey()) {
+                // Lets add fallback here for JWT rawValue
+                val valueJws = JWTUtils.getWithSignedKey(rawValue, null)
+                // and we only allow fallback if payload is conf and public
+                if (valueJws.body.containsKey("conf")) {
+                    return valueJws
+                }
+            }
+
+            // otherwise lets throw the exception
+            throw ex
+        }
+    }
 
 
 }
+
