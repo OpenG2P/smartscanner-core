@@ -44,7 +44,7 @@ import net.i2p.crypto.eddsa.EdDSASecurityProvider
 import nl.minvws.encoding.Base45
 import org.apache.commons.codec.binary.Base64 as B64
 import org.idpass.smartscanner.api.ScannerConstants
-import org.idpass.smartscanner.lib.BuildConfig
+//import org.idpass.smartscanner.lib.BuieldConfig
 import org.idpass.smartscanner.lib.R
 import org.idpass.smartscanner.lib.SmartScannerActivity
 import org.idpass.smartscanner.lib.scanner.BaseImageAnalyzer
